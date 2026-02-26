@@ -241,8 +241,8 @@
     // ─────────────────────────────────────────────
     // 🔑  PASTE YOUR SUPABASE CREDENTIALS HERE
     // ─────────────────────────────────────────────
-    const SUPABASE_URL      = 'https://xvvzxjaddcfvedtjudjx.supabase.co';       // e.g. 'https://abcxyz.supabase.co'
-    const SUPABASE_ANON_KEY = 'eyJhbGciOiJIUzI1NiIsInR5cCI6IkpXVCJ9.eyJpc3MiOiJzdXBhYmFzZSIsInJlZiI6Inh2dnp4amFkZGNmdmVkdGp1ZGp4Iiwicm9sZSI6ImFub24iLCJpYXQiOjE3NzIwOTM1ODAsImV4cCI6MjA4NzY2OTU4MH0.OdZpsbqU-WjB9beIX58-t9hH5vone-JJmFYIvLlN9hw';  // e.g. 'eyJhbGci...'
+    const SUPABASE_URL      = 'YOUR_SUPABASE_URL';       // e.g. 'https://abcxyz.supabase.co'
+    const SUPABASE_ANON_KEY = 'YOUR_SUPABASE_ANON_KEY';  // e.g. 'eyJhbGci...'
     // ─────────────────────────────────────────────
 
     const { createClient } = supabase;
@@ -262,6 +262,44 @@
     const $empty      = document.getElementById('chat-empty');
     const $connDot    = document.getElementById('conn-dot');
     const $emailDisp  = document.getElementById('user-email-display');
+
+    // ── Handle email confirmation redirect ────────
+    // When Supabase redirects back after email confirm,
+    // the token is in the URL hash (#access_token=...) or
+    // as query params (?token=...&type=signup).
+    // Calling getSession() is enough — the SDK parses it automatically.
+    async function handleRedirectIfAny() {
+      const hash   = window.location.hash;
+      const search = window.location.search;
+
+      // Supabase puts tokens in the hash fragment after OAuth/magic-link/email confirm
+      if (hash.includes('access_token') || hash.includes('refresh_token') ||
+          search.includes('token') || search.includes('code')) {
+
+        // Show a "Verifying…" message while we wait
+        showAuthError('✓ Verifying your email, please wait…');
+
+        try {
+          // exchangeCodeForSession handles PKCE flow (newer Supabase)
+          if (search.includes('code=')) {
+            await sb.auth.exchangeCodeForSession(window.location.href);
+          }
+          // For older token-in-hash flow, getSession() auto-parses it
+          const { data, error } = await sb.auth.getSession();
+          if (error) throw error;
+          if (data.session) {
+            // Clean the URL so tokens don't linger in the address bar
+            window.history.replaceState({}, document.title, '/');
+            // onAuthStateChange will fire and call enterChat()
+          }
+        } catch (err) {
+          showAuthError('Verification failed: ' + (err.message || 'Try logging in manually.'));
+        }
+      }
+    }
+
+    // Run redirect handler immediately on page load
+    handleRedirectIfAny();
 
     // ── Auth state ────────────────────────────────
     sb.auth.onAuthStateChange((_event, session) => {
@@ -296,7 +334,7 @@
         if (currentTab === 'login') {
           res = await sb.auth.signInWithPassword({ email, password });
         } else {
-          res = await sb.auth.signUp({ email, password });
+          res = await sb.auth.signUp({ email, password, options: { emailRedirectTo: 'https://messangerap.netlify.app' } });
           if (!res.error && res.data?.user && !res.data.session) {
             showAuthError('✓ Check your inbox to confirm your email.');
             setAuthLoading(false);
