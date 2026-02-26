@@ -3,15 +3,11 @@
 <head>
   <meta charset="UTF-8" />
   <meta name="viewport" content="width=device-width, initial-scale=1.0, maximum-scale=1.0, user-scalable=no" />
-  <title>Messenger</title>
+  <title>Relay — Live Messaging</title>
 
-  <!-- Tailwind CSS CDN -->
   <script src="https://cdn.tailwindcss.com"></script>
-
-  <!-- Supabase JS SDK CDN -->
   <script src="https://cdn.jsdelivr.net/npm/@supabase/supabase-js@2"></script>
 
-  <!-- Google Fonts -->
   <link rel="preconnect" href="https://fonts.googleapis.com" />
   <link rel="preconnect" href="https://fonts.gstatic.com" crossorigin />
   <link href="https://fonts.googleapis.com/css2?family=DM+Mono:wght@400;500&family=Fraunces:ital,wght@0,300;0,600;1,300&display=swap" rel="stylesheet" />
@@ -56,27 +52,23 @@
       overscroll-behavior: none;
     }
 
-    /* Scrollbar */
     #chat-window::-webkit-scrollbar       { width: 3px; }
     #chat-window::-webkit-scrollbar-track  { background: transparent; }
     #chat-window::-webkit-scrollbar-thumb  { background: #c8c0b0; border-radius: 2px; }
 
-    /* Noise texture */
     body::before {
       content: ''; position: fixed; inset: 0; pointer-events: none; z-index: 9999; opacity: 0.3;
       background-image: url("data:image/svg+xml,%3Csvg viewBox='0 0 200 200' xmlns='http://www.w3.org/2000/svg'%3E%3Cfilter id='n'%3E%3CfeTurbulence type='fractalNoise' baseFrequency='0.85' numOctaves='4' stitchTiles='stitch'/%3E%3C/filter%3E%3Crect width='100%25' height='100%25' filter='url(%23n)' opacity='0.05'/%3E%3C/svg%3E");
     }
 
-    /* Chat screen fills full viewport height properly on mobile */
     #chat-screen {
       display: none;
       flex-direction: column;
-      height: 100dvh; /* modern mobile */
-      height: 100vh;  /* fallback */
+      height: 100dvh;
+      height: 100vh;
     }
     #chat-screen.visible { display: flex; }
 
-    /* Messages area scrolls, header + input are fixed */
     #chat-window {
       flex: 1 1 0%;
       overflow-y: auto;
@@ -84,33 +76,40 @@
       overscroll-behavior: contain;
     }
 
-    /* Prevent iOS zoom on input focus */
+    /* FIX: Prevent iOS zoom on input focus — font-size must be >= 16px */
     #message-input, #auth-email, #auth-password { font-size: 16px; }
 
     .tag { font-size: 0.62rem; letter-spacing: 0.09em; text-transform: uppercase; }
     .msg-bubble { animation: slide-up 0.2s ease-out; }
     .auth-card { box-shadow: 0 0 0 1px #d4cfc4, 0 12px 40px rgba(0,0,0,0.09); }
 
-    /* Safe area padding for notched phones */
     .input-bar { padding-bottom: max(12px, env(safe-area-inset-bottom)); }
 
     @keyframes spin { to { transform: rotate(360deg); } }
     .spin { animation: spin 0.7s linear infinite; }
+
+    /* FIX: chat-empty — use display:flex properly via JS, not conflicting Tailwind classes */
+    #chat-empty {
+      display: none;
+      flex-direction: column;
+      align-items: center;
+      justify-content: center;
+      padding: 6rem 1rem;
+      text-align: center;
+      user-select: none;
+    }
+    #chat-empty.show { display: flex; }
   </style>
 </head>
 <body>
 
-  <!-- Decorative blobs -->
   <div style="position:fixed;top:0;right:0;width:22rem;height:22rem;border-radius:50%;background:radial-gradient(circle,rgba(200,75,49,.18),transparent);transform:translate(35%,-35%);filter:blur(50px);pointer-events:none;z-index:0"></div>
   <div style="position:fixed;bottom:0;left:0;width:18rem;height:18rem;border-radius:50%;background:radial-gradient(circle,rgba(90,122,94,.14),transparent);transform:translate(-35%,35%);filter:blur(50px);pointer-events:none;z-index:0"></div>
 
-  <!-- ════════════════════════════════════════
-       AUTH SCREEN
-  ════════════════════════════════════════════ -->
+  <!-- AUTH SCREEN -->
   <div id="auth-screen" class="relative z-10 min-h-screen flex items-center justify-center p-4">
     <div class="auth-card w-full max-w-sm bg-paper rounded-2xl p-6 sm:p-8 animate-fade-in">
 
-      <!-- Brand -->
       <div class="mb-7">
         <div class="flex items-center gap-2 mb-1.5">
           <div class="w-1.5 h-1.5 rounded-full bg-rust animate-pulse-dot"></div>
@@ -120,7 +119,6 @@
         <p class="text-xs text-mist mt-1">real-time conversations</p>
       </div>
 
-      <!-- Tabs -->
       <div class="flex gap-1 p-1 bg-cream rounded-xl mb-5">
         <button id="tab-login"  onclick="showTab('login')"
           class="flex-1 py-1.5 text-xs rounded-lg bg-paper text-ink transition-all duration-200">Login</button>
@@ -128,7 +126,6 @@
           class="flex-1 py-1.5 text-xs rounded-lg text-mist transition-all duration-200">Sign Up</button>
       </div>
 
-      <!-- Form -->
       <form id="auth-form" onsubmit="handleAuth(event)" class="space-y-3" novalidate>
         <div>
           <label class="tag text-mist block mb-1">Email</label>
@@ -158,12 +155,9 @@
     </div>
   </div>
 
-  <!-- ════════════════════════════════════════
-       CHAT SCREEN
-  ════════════════════════════════════════════ -->
+  <!-- CHAT SCREEN -->
   <div id="chat-screen" class="relative z-10">
 
-    <!-- Header -->
     <header class="flex-shrink-0 bg-paper/95 backdrop-blur-sm border-b border-ink/10 px-4 py-3 flex items-center justify-between gap-2">
       <div class="flex items-center gap-2 min-w-0">
         <div class="flex-shrink-0">
@@ -176,7 +170,6 @@
       </div>
 
       <div class="flex items-center gap-2 min-w-0">
-        <!-- Email visible only on sm+ -->
         <div class="hidden sm:block text-right min-w-0 max-w-[180px]">
           <p class="tag text-mist">signed in</p>
           <p id="user-email-display" class="text-xs text-ink truncate"></p>
@@ -192,15 +185,14 @@
       </div>
     </header>
 
-    <!-- Messages -->
     <div id="chat-window" class="px-3 sm:px-5 py-4">
-
       <div id="chat-loading" class="flex flex-col items-center justify-center py-24">
         <div class="w-5 h-5 border-2 border-ink/15 border-t-ink/50 rounded-full spin mb-3"></div>
         <p class="text-xs text-mist">Loading messages…</p>
       </div>
 
-      <div id="chat-empty" class="hidden flex flex-col items-center justify-center py-24 text-center select-none">
+      <!-- FIX: removed conflicting 'hidden flex' classes — now controlled via JS with .show class -->
+      <div id="chat-empty">
         <div class="text-3xl mb-2 opacity-20">✦</div>
         <p class="font-display text-2xl font-light text-ink/25">Be the first to speak.</p>
         <p class="text-xs text-mist mt-1">Messages appear here instantly</p>
@@ -209,7 +201,6 @@
       <div id="messages-container"></div>
     </div>
 
-    <!-- Error banner -->
     <div id="chat-error" class="hidden mx-3 sm:mx-5 mb-2 bg-rust/10 border border-rust/20 text-rust text-xs rounded-xl px-3 py-2 flex items-center gap-2">
       <svg xmlns="http://www.w3.org/2000/svg" width="11" height="11" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2.5" class="flex-shrink-0">
         <circle cx="12" cy="12" r="10"/><line x1="12" y1="8" x2="12" y2="12"/><line x1="12" y1="16" x2="12.01" y2="16"/>
@@ -217,7 +208,6 @@
       <span id="chat-error-text"></span>
     </div>
 
-    <!-- Input bar -->
     <div class="input-bar flex-shrink-0 bg-paper/95 backdrop-blur-sm border-t border-ink/10 px-3 sm:px-5 pt-3">
       <form id="message-form" onsubmit="sendMessage(event)" class="flex items-center gap-2">
         <input id="message-input" type="text" placeholder="Write a message…" autocomplete="off"
@@ -231,29 +221,33 @@
         </button>
       </form>
     </div>
-
   </div>
 
-  <!-- ════════════════════════════════════════
-       JAVASCRIPT
-  ════════════════════════════════════════════ -->
   <script>
-    // ─────────────────────────────────────────────
-    // 🔑  PASTE YOUR SUPABASE CREDENTIALS HERE
-    // ─────────────────────────────────────────────
-    const SUPABASE_URL      = 'https://xvvzxjaddcfvedtjudjx.supabase.co';       // e.g. 'https://abcxyz.supabase.co'
-    const SUPABASE_ANON_KEY = 'eyJhbGciOiJIUzI1NiIsInR5cCI6IkpXVCJ9.eyJpc3MiOiJzdXBhYmFzZSIsInJlZiI6Inh2dnp4amFkZGNmdmVkdGp1ZGp4Iiwicm9sZSI6ImFub24iLCJpYXQiOjE3NzIwOTM1ODAsImV4cCI6MjA4NzY2OTU4MH0.OdZpsbqU-WjB9beIX58-t9hH5vone-JJmFYIvLlN9hw';  // e.g. 'eyJhbGci...'
-    // ─────────────────────────────────────────────
+    // ─────────────────────────────────────────────────────────
+    // ⚠️  IMPORTANT: Replace this URL with your EXACT Netlify URL
+    //     Go to Supabase → Authentication → URL Configuration
+    //     and add your Netlify URL to "Redirect URLs" whitelist
+    // ─────────────────────────────────────────────────────────
+    const SITE_URL          = window.location.origin; // Auto-detects your deployed URL
+    const SUPABASE_URL      = 'https://xvvzxjaddcfvedtjudjx.supabase.co';
+    const SUPABASE_ANON_KEY = 'eyJhbGciOiJIUzI1NiIsInR5cCI6IkpXVCJ9.eyJpc3MiOiJzdXBhYmFzZSIsInJlZiI6Inh2dnp4amFkZGNmdmVkdGp1ZGp4Iiwicm9sZSI6ImFub24iLCJpYXQiOjE3NzIwOTM1ODAsImV4cCI6MjA4NzY2OTU4MH0.OdZpsbqU-WjB9beIX58-t9hH5vone-JJmFYIvLlN9hw';
 
     const { createClient } = supabase;
-    const sb = createClient(SUPABASE_URL, SUPABASE_ANON_KEY);
+    const sb = createClient(SUPABASE_URL, SUPABASE_ANON_KEY, {
+      auth: {
+        // FIX: Use PKCE flow for better security and reliable email confirmation
+        flowType: 'pkce',
+        autoRefreshToken: true,
+        persistSession: true,
+        detectSessionInUrl: true,  // FIX: Ensures tokens in URL are parsed on load
+      }
+    });
 
-    // State
     let currentUser     = null;
     let currentTab      = 'login';
     let realtimeChannel = null;
 
-    // DOM
     const $authScreen = document.getElementById('auth-screen');
     const $chatScreen = document.getElementById('chat-screen');
     const $msgs       = document.getElementById('messages-container');
@@ -263,45 +257,32 @@
     const $connDot    = document.getElementById('conn-dot');
     const $emailDisp  = document.getElementById('user-email-display');
 
-    // ── Handle email confirmation redirect ────────
-    // When Supabase redirects back after email confirm,
-    // the token is in the URL hash (#access_token=...) or
-    // as query params (?token=...&type=signup).
-    // Calling getSession() is enough — the SDK parses it automatically.
+    // FIX: Handle email confirmation redirect properly
+    // Supabase SDK with detectSessionInUrl:true handles this automatically,
+    // but we still clean the URL and show feedback.
     async function handleRedirectIfAny() {
       const hash   = window.location.hash;
       const search = window.location.search;
 
-      // Supabase puts tokens in the hash fragment after OAuth/magic-link/email confirm
-      if (hash.includes('access_token') || hash.includes('refresh_token') ||
-          search.includes('token') || search.includes('code')) {
-
-        // Show a "Verifying…" message while we wait
-        showAuthError('✓ Verifying your email, please wait…');
-
+      if (hash.includes('access_token') || search.includes('code=') || search.includes('token=')) {
+        showAuthError('✓ Verifying your account, please wait…');
         try {
-          // exchangeCodeForSession handles PKCE flow (newer Supabase)
           if (search.includes('code=')) {
-            await sb.auth.exchangeCodeForSession(window.location.href);
+            const { error } = await sb.auth.exchangeCodeForSession(window.location.href);
+            if (error) throw error;
           }
-          // For older token-in-hash flow, getSession() auto-parses it
-          const { data, error } = await sb.auth.getSession();
-          if (error) throw error;
-          if (data.session) {
-            // Clean the URL so tokens don't linger in the address bar
-            window.history.replaceState({}, document.title, '/');
-            // onAuthStateChange will fire and call enterChat()
-          }
+          // Clean the URL — remove tokens from the address bar
+          window.history.replaceState({}, document.title, window.location.pathname);
         } catch (err) {
-          showAuthError('Verification failed: ' + (err.message || 'Try logging in manually.'));
+          showAuthError('Verification failed: ' + (err.message || 'Please try logging in manually.'));
         }
       }
     }
 
-    // Run redirect handler immediately on page load
+    // Run on page load
     handleRedirectIfAny();
 
-    // ── Auth state ────────────────────────────────
+    // ── Auth state listener ───────────────────────
     sb.auth.onAuthStateChange((_event, session) => {
       if (session?.user) { currentUser = session.user; enterChat(); }
       else               { currentUser = null;          enterAuth(); }
@@ -333,17 +314,37 @@
         let res;
         if (currentTab === 'login') {
           res = await sb.auth.signInWithPassword({ email, password });
+          if (res.error) throw res.error;
         } else {
-          res = await sb.auth.signUp({ email, password, options: { emailRedirectTo: 'https://messangerap.netlify.app' } });
-          if (!res.error && res.data?.user && !res.data.session) {
-            showAuthError('✓ Check your inbox to confirm your email.');
+          res = await sb.auth.signUp({
+            email,
+            password,
+            options: {
+              // FIX: Use window.location.origin so it works on any Netlify URL automatically
+              emailRedirectTo: SITE_URL,
+            }
+          });
+          if (res.error) throw res.error;
+          // If email confirmation is required (no session returned)
+          if (res.data?.user && !res.data.session) {
+            showAuthError('✓ Account created! Check your inbox and click the confirmation link.');
             setAuthLoading(false);
             return;
           }
+          // If email confirmation is disabled in Supabase, user is logged in immediately
         }
-        if (res.error) throw res.error;
       } catch (err) {
-        showAuthError(err.message || 'Authentication failed.');
+        // FIX: Friendlier error messages
+        const msg = err.message || '';
+        if (msg.includes('Invalid login credentials')) {
+          showAuthError('Wrong email or password. Please try again.');
+        } else if (msg.includes('Email not confirmed')) {
+          showAuthError('Please confirm your email first. Check your inbox.');
+        } else if (msg.includes('User already registered')) {
+          showAuthError('An account with this email already exists. Try logging in.');
+        } else {
+          showAuthError(msg || 'Authentication failed. Please try again.');
+        }
       } finally {
         setAuthLoading(false);
       }
@@ -361,6 +362,7 @@
       $authScreen.style.display = '';
       $msgs.innerHTML = '';
     }
+
     function enterChat() {
       $authScreen.style.display = 'none';
       $chatScreen.classList.add('visible');
@@ -370,8 +372,10 @@
 
     // ── Init chat ─────────────────────────────────
     async function initChat() {
+      // Avoid duplicate subscriptions if initChat is called again
+      if (realtimeChannel) { await sb.removeChannel(realtimeChannel); realtimeChannel = null; }
       $loading.classList.remove('hidden');
-      $empty.classList.add('hidden');
+      $empty.classList.remove('show');
       $msgs.innerHTML = '';
       await loadMessages();
       subscribeRealtime();
@@ -387,36 +391,40 @@
           .limit(300);
         if (error) throw error;
         $loading.classList.add('hidden');
-        if (!data?.length) { $empty.classList.remove('hidden'); }
-        else { data.forEach(renderMessage); scrollToBottom(false); }
+        if (!data?.length) {
+          $empty.classList.add('show'); // FIX: use .show class instead of removing 'hidden'
+        } else {
+          data.forEach(renderMessage);
+          scrollToBottom(false);
+        }
       } catch (err) {
         $loading.classList.add('hidden');
-        showChatError('Could not load messages: ' + (err.message || 'unknown'));
+        showChatError('Could not load messages: ' + (err.message || 'unknown error'));
       }
     }
 
-    // ── Realtime ──────────────────────────────────
+    // ── Realtime subscription ─────────────────────
     function subscribeRealtime() {
       realtimeChannel = sb
         .channel('public:messages')
         .on('postgres_changes', { event: 'INSERT', schema: 'public', table: 'messages' }, (payload) => {
-          $empty.classList.add('hidden');
+          $empty.classList.remove('show'); // FIX: consistent with new approach
           renderMessage(payload.new);
           scrollToBottom(true);
         })
         .subscribe((status) => {
           if (status === 'SUBSCRIBED') {
-            $connDot.style.background = '#5a7a5e';
+            $connDot.style.background = '#5a7a5e'; // green
             $connDot.title = 'Connected';
           } else if (status === 'CHANNEL_ERROR' || status === 'TIMED_OUT') {
-            $connDot.style.background = '#c84b31';
+            $connDot.style.background = '#c84b31'; // red
             $connDot.title = 'Disconnected';
-            showChatError('Realtime disconnected — refresh to reconnect.');
+            showChatError('Connection lost — refresh the page to reconnect.');
           }
         });
     }
 
-    // ── Send ──────────────────────────────────────
+    // ── Send message ──────────────────────────────
     async function sendMessage(e) {
       e.preventDefault();
       const input   = document.getElementById('message-input');
@@ -424,16 +432,25 @@
       if (!content || !currentUser) return;
       input.value = '';
       hideChatError();
+
+      // FIX: Disable input while sending to prevent double-sends
+      input.disabled = true;
       try {
-        const { error } = await sb.from('messages').insert([{ content, user_email: currentUser.email }]);
+        const { error } = await sb.from('messages').insert([{
+          content,
+          user_email: currentUser.email
+        }]);
         if (error) throw error;
       } catch (err) {
-        input.value = content;
-        showChatError('Send failed: ' + (err.message || 'unknown'));
+        input.value = content; // Restore message on failure
+        showChatError('Send failed: ' + (err.message || 'unknown error'));
+      } finally {
+        input.disabled = false;
+        input.focus();
       }
     }
 
-    // ── Render bubble ─────────────────────────────
+    // ── Render message bubble ─────────────────────
     function renderMessage(msg) {
       const isOwn   = msg.user_email === currentUser?.email;
       const initial = (msg.user_email || '?')[0].toUpperCase();
@@ -441,30 +458,25 @@
       const wrapper = document.createElement('div');
       wrapper.className = `msg-bubble flex gap-2 mb-2.5 ${isOwn ? 'flex-row-reverse' : 'flex-row'}`;
 
-      // Avatar
       const av = document.createElement('div');
       av.style.cssText = `width:1.75rem;height:1.75rem;border-radius:50%;flex-shrink:0;display:flex;align-items:center;justify-content:center;font-size:.7rem;font-weight:500;color:#f5f0e8;margin-top:2px;background:${isOwn ? '#c84b31' : '#5a7a5e'}`;
       av.textContent = initial;
 
-      // Column
       const col = document.createElement('div');
       col.className = `flex flex-col gap-0.5 min-w-0 ${isOwn ? 'items-end' : 'items-start'}`;
       col.style.maxWidth = 'min(78%, 340px)';
 
-      // Sender label
       if (!isOwn) {
         const lbl = document.createElement('p');
         lbl.className = 'tag text-mist px-1 truncate w-full';
-        lbl.textContent = msg.user_email || 'anonymous'; // safe: textContent
+        lbl.textContent = msg.user_email || 'anonymous';
         col.appendChild(lbl);
       }
 
-      // Bubble
       const bubble = document.createElement('div');
       bubble.className = `px-3.5 py-2 text-sm leading-relaxed break-words w-full rounded-2xl ${isOwn ? 'bg-ink text-paper rounded-tr-sm' : 'bg-cream text-ink rounded-tl-sm'}`;
-      bubble.textContent = msg.content; // ✦ XSS-safe: textContent only
+      bubble.textContent = msg.content; // XSS-safe: textContent only
 
-      // Time
       const ts = document.createElement('p');
       ts.className = 'tag text-mist/50 px-1';
       ts.textContent = new Date(msg.created_at).toLocaleTimeString([], { hour:'2-digit', minute:'2-digit' });
@@ -485,8 +497,12 @@
       document.getElementById('auth-spinner').classList.toggle('hidden', !on);
       document.getElementById('auth-submit').disabled = on;
     }
-    function showAuthError(m) { const e = document.getElementById('auth-error'); e.textContent = m; e.classList.remove('hidden'); }
-    function hideAuthError()  { document.getElementById('auth-error').classList.add('hidden'); }
+    function showAuthError(m) {
+      const e = document.getElementById('auth-error');
+      e.textContent = m;
+      e.classList.remove('hidden');
+    }
+    function hideAuthError() { document.getElementById('auth-error').classList.add('hidden'); }
     function showChatError(m) {
       document.getElementById('chat-error-text').textContent = m;
       document.getElementById('chat-error').classList.remove('hidden');
@@ -494,7 +510,6 @@
     }
     function hideChatError() { document.getElementById('chat-error').classList.add('hidden'); }
 
-    // Enter to send
     document.getElementById('message-input').addEventListener('keydown', e => {
       if (e.key === 'Enter' && !e.shiftKey) { e.preventDefault(); document.getElementById('message-form').requestSubmit(); }
     });
