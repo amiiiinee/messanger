@@ -3,40 +3,29 @@
 <head>
   <meta charset="UTF-8" />
   <meta name="viewport" content="width=device-width, initial-scale=1.0, maximum-scale=1.0, user-scalable=no" />
-  <title>Relay — Live Messaging</title>
-
+  <title>Relay — Messenger</title>
   <script src="https://cdn.tailwindcss.com"></script>
   <script src="https://cdn.jsdelivr.net/npm/@supabase/supabase-js@2"></script>
-
   <link rel="preconnect" href="https://fonts.googleapis.com" />
-  <link rel="preconnect" href="https://fonts.gstatic.com" crossorigin />
   <link href="https://fonts.googleapis.com/css2?family=DM+Mono:wght@400;500&family=Fraunces:ital,wght@0,300;0,600;1,300&display=swap" rel="stylesheet" />
 
   <script>
     tailwind.config = {
       theme: {
         extend: {
-          fontFamily: {
-            display: ['Fraunces', 'serif'],
-            mono: ['DM Mono', 'monospace'],
-          },
-          colors: {
-            ink:   '#0d0d0d',
-            paper: '#f5f0e8',
-            cream: '#ede8dc',
-            rust:  '#c84b31',
-            sage:  '#5a7a5e',
-            mist:  '#8a9ba8',
-          },
+          fontFamily: { display: ['Fraunces','serif'], mono: ['DM Mono','monospace'] },
+          colors: { ink:'#0d0d0d', paper:'#f5f0e8', cream:'#ede8dc', rust:'#c84b31', sage:'#5a7a5e', mist:'#8a9ba8' },
           keyframes: {
-            'slide-up':  { '0%': { opacity:'0', transform:'translateY(10px)' }, '100%': { opacity:'1', transform:'translateY(0)' } },
-            'fade-in':   { '0%': { opacity:'0' }, '100%': { opacity:'1' } },
-            'pulse-dot': { '0%,100%': { opacity:'1' }, '50%': { opacity:'0.25' } },
+            'slide-up':  { '0%':{ opacity:'0', transform:'translateY(8px)' }, '100%':{ opacity:'1', transform:'translateY(0)' } },
+            'fade-in':   { '0%':{ opacity:'0' }, '100%':{ opacity:'1' } },
+            'pulse-dot': { '0%,100%':{ opacity:'1' }, '50%':{ opacity:'0.3' } },
+            'recording': { '0%,100%':{ transform:'scale(1)', opacity:'1' }, '50%':{ transform:'scale(1.15)', opacity:'0.7' } },
           },
           animation: {
-            'slide-up':  'slide-up 0.22s ease-out forwards',
-            'fade-in':   'fade-in 0.35s ease-out forwards',
+            'slide-up':  'slide-up 0.2s ease-out forwards',
+            'fade-in':   'fade-in 0.3s ease-out forwards',
             'pulse-dot': 'pulse-dot 1.4s ease-in-out infinite',
+            'recording': 'recording 1s ease-in-out infinite',
           },
         },
       },
@@ -45,474 +34,933 @@
 
   <style>
     * { box-sizing: border-box; }
-    html, body { height: 100%; margin: 0; }
-    body {
-      font-family: 'DM Mono', monospace;
-      background: #f5f0e8;
-      overscroll-behavior: none;
-    }
-
-    #chat-window::-webkit-scrollbar       { width: 3px; }
-    #chat-window::-webkit-scrollbar-track  { background: transparent; }
-    #chat-window::-webkit-scrollbar-thumb  { background: #c8c0b0; border-radius: 2px; }
-
-    body::before {
-      content: ''; position: fixed; inset: 0; pointer-events: none; z-index: 9999; opacity: 0.3;
-      background-image: url("data:image/svg+xml,%3Csvg viewBox='0 0 200 200' xmlns='http://www.w3.org/2000/svg'%3E%3Cfilter id='n'%3E%3CfeTurbulence type='fractalNoise' baseFrequency='0.85' numOctaves='4' stitchTiles='stitch'/%3E%3C/filter%3E%3Crect width='100%25' height='100%25' filter='url(%23n)' opacity='0.05'/%3E%3C/svg%3E");
-    }
-
-    #chat-screen {
-      display: none;
-      flex-direction: column;
-      height: 100dvh;
-      height: 100vh;
-    }
-    #chat-screen.visible { display: flex; }
-
-    #chat-window {
-      flex: 1 1 0%;
-      overflow-y: auto;
-      -webkit-overflow-scrolling: touch;
-      overscroll-behavior: contain;
-    }
-
-    /* FIX: Prevent iOS zoom on input focus — font-size must be >= 16px */
-    #message-input, #auth-email, #auth-password { font-size: 16px; }
-
-    .tag { font-size: 0.62rem; letter-spacing: 0.09em; text-transform: uppercase; }
-    .msg-bubble { animation: slide-up 0.2s ease-out; }
-    .auth-card { box-shadow: 0 0 0 1px #d4cfc4, 0 12px 40px rgba(0,0,0,0.09); }
-
-    .input-bar { padding-bottom: max(12px, env(safe-area-inset-bottom)); }
+    html, body { height: 100%; margin: 0; overflow: hidden; }
+    body { font-family: 'DM Mono', monospace; background: #f5f0e8; }
 
     @keyframes spin { to { transform: rotate(360deg); } }
     .spin { animation: spin 0.7s linear infinite; }
 
-    /* FIX: chat-empty — use display:flex properly via JS, not conflicting Tailwind classes */
-    #chat-empty {
-      display: none;
-      flex-direction: column;
-      align-items: center;
-      justify-content: center;
-      padding: 6rem 1rem;
-      text-align: center;
-      user-select: none;
+    body::before {
+      content:''; position:fixed; inset:0; pointer-events:none; z-index:9999; opacity:0.25;
+      background-image: url("data:image/svg+xml,%3Csvg viewBox='0 0 200 200' xmlns='http://www.w3.org/2000/svg'%3E%3Cfilter id='n'%3E%3CfeTurbulence type='fractalNoise' baseFrequency='0.85' numOctaves='4' stitchTiles='stitch'/%3E%3C/filter%3E%3Crect width='100%25' height='100%25' filter='url(%23n)' opacity='0.05'/%3E%3C/svg%3E");
     }
-    #chat-empty.show { display: flex; }
+
+    #app { display: flex; height: 100dvh; height: 100vh; position: relative; z-index: 10; }
+
+    /* ── Sidebar ── */
+    #sidebar {
+      width: 300px; flex-shrink: 0;
+      background: #ede8dc;
+      border-right: 1px solid rgba(13,13,13,0.1);
+      display: flex; flex-direction: column;
+      transition: transform 0.28s cubic-bezier(.4,0,.2,1);
+    }
+
+    /* ── Chat panel ── */
+    #chat-panel {
+      flex: 1; display: flex; flex-direction: column; min-width: 0;
+    }
+
+    #chat-messages { flex:1; overflow-y:auto; overscroll-behavior:contain; -webkit-overflow-scrolling:touch; }
+    #chat-messages::-webkit-scrollbar { width:3px; }
+    #chat-messages::-webkit-scrollbar-thumb { background:#c8c0b0; border-radius:2px; }
+
+    /* Conversation item */
+    .conv-item { cursor:pointer; transition: background 0.15s; }
+    .conv-item:hover { background: rgba(13,13,13,0.05); }
+    .conv-item.active { background: rgba(200,75,49,0.1); }
+
+    .msg-bubble { animation: slide-up 0.18s ease-out; }
+
+    /* Voice recorder */
+    .voice-bar { display:none; align-items:center; gap:8px; }
+    .voice-bar.active { display:flex; }
+
+    /* Audio player custom */
+    audio { height: 28px; }
+    audio::-webkit-media-controls-panel { background: transparent; }
+
+    /* Waveform bars */
+    .wave-bar { width:3px; border-radius:3px; background:#8a9ba8; animation: wave-anim 0.8s ease-in-out infinite; }
+    @keyframes wave-anim {
+      0%,100% { transform: scaleY(0.4); }
+      50% { transform: scaleY(1.2); }
+    }
+    .wave-bar:nth-child(2) { animation-delay: 0.1s; }
+    .wave-bar:nth-child(3) { animation-delay: 0.2s; }
+    .wave-bar:nth-child(4) { animation-delay: 0.3s; }
+    .wave-bar:nth-child(5) { animation-delay: 0.15s; }
+
+    /* Input area */
+    #message-input { font-size:16px; }
+    #auth-email, #auth-password { font-size:16px; }
+    .input-bar { padding-bottom: max(12px, env(safe-area-inset-bottom)); }
+
+    /* Mobile sidebar toggle */
+    @media (max-width: 640px) {
+      #sidebar { position:absolute; top:0; left:0; bottom:0; z-index:100; transform:translateX(-100%); }
+      #sidebar.open { transform:translateX(0); box-shadow: 4px 0 20px rgba(0,0,0,0.15); }
+      #sidebar-overlay { display:block; }
+    }
+    @media (min-width: 641px) {
+      #sidebar-overlay { display:none !important; }
+      #menu-btn { display:none; }
+    }
+
+    #sidebar-overlay {
+      display:none; position:fixed; inset:0; background:rgba(0,0,0,0.3); z-index:99;
+    }
+
+    /* Auth card */
+    .auth-card { box-shadow: 0 0 0 1px #d4cfc4, 0 12px 40px rgba(0,0,0,0.09); }
+
+    /* New chat search */
+    .user-result { cursor:pointer; transition:background 0.15s; }
+    .user-result:hover { background:rgba(13,13,13,0.05); }
+
+    /* Recording pulse */
+    .rec-pulse { animation: recording 1s ease-in-out infinite; }
   </style>
 </head>
 <body>
 
-  <div style="position:fixed;top:0;right:0;width:22rem;height:22rem;border-radius:50%;background:radial-gradient(circle,rgba(200,75,49,.18),transparent);transform:translate(35%,-35%);filter:blur(50px);pointer-events:none;z-index:0"></div>
-  <div style="position:fixed;bottom:0;left:0;width:18rem;height:18rem;border-radius:50%;background:radial-gradient(circle,rgba(90,122,94,.14),transparent);transform:translate(-35%,35%);filter:blur(50px);pointer-events:none;z-index:0"></div>
+<!-- BG blobs -->
+<div style="position:fixed;top:0;right:0;width:24rem;height:24rem;border-radius:50%;background:radial-gradient(circle,rgba(200,75,49,.15),transparent);transform:translate(35%,-35%);filter:blur(60px);pointer-events:none;z-index:0"></div>
+<div style="position:fixed;bottom:0;left:0;width:20rem;height:20rem;border-radius:50%;background:radial-gradient(circle,rgba(90,122,94,.12),transparent);transform:translate(-35%,35%);filter:blur(60px);pointer-events:none;z-index:0"></div>
 
-  <!-- AUTH SCREEN -->
-  <div id="auth-screen" class="relative z-10 min-h-screen flex items-center justify-center p-4">
-    <div class="auth-card w-full max-w-sm bg-paper rounded-2xl p-6 sm:p-8 animate-fade-in">
-
-      <div class="mb-7">
-        <div class="flex items-center gap-2 mb-1.5">
-          <div class="w-1.5 h-1.5 rounded-full bg-rust animate-pulse-dot"></div>
-          <span class="tag text-mist">live messaging</span>
-        </div>
-        <h1 class="font-display text-4xl font-light leading-none text-ink">Relay<span class="text-rust">.</span></h1>
-        <p class="text-xs text-mist mt-1">real-time conversations</p>
+<!-- ══════════════════ AUTH SCREEN ══════════════════ -->
+<div id="auth-screen" style="position:fixed;inset:0;z-index:200;display:flex;align-items:center;justify-content:center;padding:1rem;background:#f5f0e8">
+  <div class="auth-card w-full max-w-sm bg-paper rounded-2xl p-7 animate-fade-in">
+    <div class="mb-7">
+      <div class="flex items-center gap-2 mb-1.5">
+        <div class="w-1.5 h-1.5 rounded-full bg-rust animate-pulse-dot"></div>
+        <span style="font-size:.62rem;letter-spacing:.09em;text-transform:uppercase" class="text-mist">messenger</span>
       </div>
+      <h1 class="font-display text-4xl font-light text-ink leading-none">Relay<span class="text-rust">.</span></h1>
+      <p class="text-xs text-mist mt-1">private conversations</p>
+    </div>
 
-      <div class="flex gap-1 p-1 bg-cream rounded-xl mb-5">
-        <button id="tab-login"  onclick="showTab('login')"
-          class="flex-1 py-1.5 text-xs rounded-lg bg-paper text-ink transition-all duration-200">Login</button>
-        <button id="tab-signup" onclick="showTab('signup')"
-          class="flex-1 py-1.5 text-xs rounded-lg text-mist transition-all duration-200">Sign Up</button>
+    <div class="flex gap-1 p-1 bg-cream rounded-xl mb-5">
+      <button id="tab-login"  onclick="showTab('login')"
+        class="flex-1 py-1.5 text-xs rounded-lg bg-paper text-ink transition-all">Login</button>
+      <button id="tab-signup" onclick="showTab('signup')"
+        class="flex-1 py-1.5 text-xs rounded-lg text-mist transition-all">Sign Up</button>
+    </div>
+
+    <form id="auth-form" onsubmit="handleAuth(event)" class="space-y-3" novalidate>
+      <div>
+        <label style="font-size:.62rem;letter-spacing:.09em;text-transform:uppercase" class="text-mist block mb-1">Email</label>
+        <input id="auth-email" type="email" required placeholder="you@example.com" autocomplete="email"
+          class="w-full bg-cream border border-transparent focus:border-ink/25 rounded-xl px-4 py-2.5 text-sm text-ink placeholder-mist/50 outline-none transition-colors" />
       </div>
+      <div>
+        <label style="font-size:.62rem;letter-spacing:.09em;text-transform:uppercase" class="text-mist block mb-1">Password</label>
+        <input id="auth-password" type="password" required placeholder="••••••••" autocomplete="current-password"
+          class="w-full bg-cream border border-transparent focus:border-ink/25 rounded-xl px-4 py-2.5 text-sm text-ink placeholder-mist/50 outline-none transition-colors" />
+      </div>
+      <div id="auth-error" class="hidden text-xs text-rust bg-rust/10 border border-rust/20 rounded-xl px-3 py-2"></div>
+      <button type="submit" id="auth-submit"
+        class="w-full bg-ink text-paper py-2.5 rounded-xl text-sm hover:bg-ink/80 active:scale-[0.98] transition-all flex items-center justify-center gap-2">
+        <span id="auth-btn-text">Login</span>
+        <span id="auth-spinner" class="hidden w-3.5 h-3.5 border-2 border-paper/30 border-t-paper rounded-full spin"></span>
+      </button>
+    </form>
 
-      <form id="auth-form" onsubmit="handleAuth(event)" class="space-y-3" novalidate>
+    <p class="text-center text-xs text-mist mt-5">
+      <span id="switch-label">No account?</span>
+      <button onclick="showTab(currentTab==='login'?'signup':'login')" class="text-ink underline underline-offset-2 ml-1">
+        <span id="switch-btn">Sign up</span>
+      </button>
+    </p>
+  </div>
+</div>
+
+<!-- ══════════════════ APP ══════════════════ -->
+<div id="app" style="display:none">
+
+  <!-- Sidebar overlay (mobile) -->
+  <div id="sidebar-overlay" onclick="closeSidebar()"></div>
+
+  <!-- ── SIDEBAR ── -->
+  <div id="sidebar">
+    <div class="flex-shrink-0 px-4 pt-5 pb-3 border-b border-ink/10">
+      <div class="flex items-center justify-between mb-4">
         <div>
-          <label class="tag text-mist block mb-1">Email</label>
-          <input id="auth-email" type="email" required placeholder="you@example.com" autocomplete="email"
-            class="w-full bg-cream border border-transparent focus:border-ink/25 rounded-xl px-4 py-2.5 text-sm text-ink placeholder-mist/50 outline-none transition-colors" />
+          <h1 class="font-display text-2xl font-semibold text-ink leading-none">Relay<span class="text-rust">.</span></h1>
+          <p style="font-size:.62rem;letter-spacing:.09em;text-transform:uppercase" class="text-mist mt-0.5">messages</p>
         </div>
-        <div>
-          <label class="tag text-mist block mb-1">Password</label>
-          <input id="auth-password" type="password" required placeholder="••••••••" autocomplete="current-password"
-            class="w-full bg-cream border border-transparent focus:border-ink/25 rounded-xl px-4 py-2.5 text-sm text-ink placeholder-mist/50 outline-none transition-colors" />
-        </div>
-
-        <div id="auth-error" class="hidden text-xs text-rust bg-rust/10 border border-rust/20 rounded-xl px-3 py-2"></div>
-
-        <button type="submit" id="auth-submit"
-          class="w-full bg-ink text-paper py-2.5 rounded-xl text-sm hover:bg-ink/80 active:scale-[0.98] transition-all duration-150 flex items-center justify-center gap-2">
-          <span id="auth-btn-text">Login</span>
-          <span id="auth-spinner" class="hidden w-3.5 h-3.5 border-2 border-paper/30 border-t-paper rounded-full spin"></span>
+        <button onclick="handleSignOut()" title="Sign out"
+          class="w-8 h-8 flex items-center justify-center rounded-lg bg-paper/60 hover:bg-rust/10 text-mist hover:text-rust transition-all">
+          <svg xmlns="http://www.w3.org/2000/svg" width="13" height="13" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2.5" stroke-linecap="round" stroke-linejoin="round">
+            <path d="M9 21H5a2 2 0 0 1-2-2V5a2 2 0 0 1 2-2h4"/><polyline points="16,17 21,12 16,7"/><line x1="21" y1="12" x2="9" y2="12"/>
+          </svg>
         </button>
-      </form>
+      </div>
 
-      <p class="text-center text-xs text-mist mt-5">
-        <span id="switch-label">No account?</span>
-        <button onclick="showTab(currentTab==='login'?'signup':'login')" id="switch-btn"
-          class="text-ink underline underline-offset-2 ml-1 cursor-pointer">Sign up</button>
-      </p>
+      <!-- Me -->
+      <div class="flex items-center gap-2 mb-3">
+        <div id="my-avatar" class="w-8 h-8 rounded-full bg-rust flex items-center justify-center text-paper text-xs font-medium flex-shrink-0"></div>
+        <div class="min-w-0">
+          <p class="text-xs text-ink truncate" id="my-email"></p>
+          <p style="font-size:.6rem;letter-spacing:.08em;text-transform:uppercase" class="text-sage">online</p>
+        </div>
+      </div>
+
+      <!-- New chat button -->
+      <button onclick="openNewChat()"
+        class="w-full flex items-center justify-center gap-2 bg-ink text-paper text-xs py-2 rounded-xl hover:bg-rust active:scale-[0.98] transition-all">
+        <svg xmlns="http://www.w3.org/2000/svg" width="11" height="11" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2.5" stroke-linecap="round" stroke-linejoin="round"><line x1="12" y1="5" x2="12" y2="19"/><line x1="5" y1="12" x2="19" y2="12"/></svg>
+        New Conversation
+      </button>
+    </div>
+
+    <!-- Conversations list -->
+    <div id="conv-list" class="flex-1 overflow-y-auto py-2">
+      <div id="conv-loading" class="flex items-center justify-center py-8">
+        <div class="w-4 h-4 border-2 border-ink/15 border-t-ink/50 rounded-full spin"></div>
+      </div>
+      <div id="conv-empty" class="hidden text-center py-8 px-4">
+        <p class="text-xs text-mist">No conversations yet.<br>Start one above!</p>
+      </div>
     </div>
   </div>
 
-  <!-- CHAT SCREEN -->
-  <div id="chat-screen" class="relative z-10">
+  <!-- ── CHAT PANEL ── -->
+  <div id="chat-panel">
 
-    <header class="flex-shrink-0 bg-paper/95 backdrop-blur-sm border-b border-ink/10 px-4 py-3 flex items-center justify-between gap-2">
-      <div class="flex items-center gap-2 min-w-0">
-        <div class="flex-shrink-0">
+    <!-- Header -->
+    <header class="flex-shrink-0 bg-paper/95 backdrop-blur-sm border-b border-ink/10 px-4 py-3 flex items-center gap-3">
+      <button id="menu-btn" onclick="openSidebar()"
+        class="w-8 h-8 flex items-center justify-center rounded-lg bg-cream text-mist">
+        <svg xmlns="http://www.w3.org/2000/svg" width="14" height="14" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2.5" stroke-linecap="round" stroke-linejoin="round"><line x1="3" y1="6" x2="21" y2="6"/><line x1="3" y1="12" x2="21" y2="12"/><line x1="3" y1="18" x2="21" y2="18"/></svg>
+      </button>
+      <div id="chat-header-info" class="flex items-center gap-2 min-w-0">
+        <div id="chat-header-avatar" class="w-8 h-8 rounded-full bg-sage flex items-center justify-center text-paper text-xs font-medium flex-shrink-0 hidden"></div>
+        <div class="min-w-0">
+          <p id="chat-header-name" class="text-sm text-ink truncate font-medium">Select a conversation</p>
           <div class="flex items-center gap-1.5">
-            <span class="font-display text-xl font-semibold text-ink leading-none">Relay<span class="text-rust">.</span></span>
-            <span id="conn-dot" class="w-1.5 h-1.5 rounded-full bg-mist flex-shrink-0" title="Connecting"></span>
+            <div id="conn-dot" class="w-1.5 h-1.5 rounded-full bg-mist"></div>
+            <p id="chat-header-status" style="font-size:.6rem;letter-spacing:.08em;text-transform:uppercase" class="text-mist">—</p>
           </div>
-          <p class="tag text-mist">global channel</p>
         </div>
-      </div>
-
-      <div class="flex items-center gap-2 min-w-0">
-        <div class="hidden sm:block text-right min-w-0 max-w-[180px]">
-          <p class="tag text-mist">signed in</p>
-          <p id="user-email-display" class="text-xs text-ink truncate"></p>
-        </div>
-        <button onclick="handleSignOut()" title="Sign out"
-          class="flex-shrink-0 w-8 h-8 flex items-center justify-center rounded-lg bg-cream hover:bg-rust/10 text-mist hover:text-rust transition-all duration-150">
-          <svg xmlns="http://www.w3.org/2000/svg" width="14" height="14" viewBox="0 0 24 24" fill="none"
-            stroke="currentColor" stroke-width="2" stroke-linecap="round" stroke-linejoin="round">
-            <path d="M9 21H5a2 2 0 0 1-2-2V5a2 2 0 0 1 2-2h4"/>
-            <polyline points="16,17 21,12 16,7"/><line x1="21" y1="12" x2="9" y2="12"/>
-          </svg>
-        </button>
       </div>
     </header>
 
-    <div id="chat-window" class="px-3 sm:px-5 py-4">
-      <div id="chat-loading" class="flex flex-col items-center justify-center py-24">
-        <div class="w-5 h-5 border-2 border-ink/15 border-t-ink/50 rounded-full spin mb-3"></div>
-        <p class="text-xs text-mist">Loading messages…</p>
+    <!-- Messages -->
+    <div id="chat-messages" class="px-3 sm:px-5 py-4">
+      <!-- Empty state -->
+      <div id="chat-empty" class="flex flex-col items-center justify-center py-24 text-center select-none">
+        <div class="text-4xl mb-3 opacity-15">◈</div>
+        <p class="font-display text-2xl font-light text-ink/20">Your messages</p>
+        <p class="text-xs text-mist mt-1">Select a conversation or start a new one</p>
       </div>
-
-      <!-- FIX: removed conflicting 'hidden flex' classes — now controlled via JS with .show class -->
-      <div id="chat-empty">
-        <div class="text-3xl mb-2 opacity-20">✦</div>
-        <p class="font-display text-2xl font-light text-ink/25">Be the first to speak.</p>
-        <p class="text-xs text-mist mt-1">Messages appear here instantly</p>
-      </div>
-
       <div id="messages-container"></div>
     </div>
 
+    <!-- Chat error -->
     <div id="chat-error" class="hidden mx-3 sm:mx-5 mb-2 bg-rust/10 border border-rust/20 text-rust text-xs rounded-xl px-3 py-2 flex items-center gap-2">
-      <svg xmlns="http://www.w3.org/2000/svg" width="11" height="11" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2.5" class="flex-shrink-0">
-        <circle cx="12" cy="12" r="10"/><line x1="12" y1="8" x2="12" y2="12"/><line x1="12" y1="16" x2="12.01" y2="16"/>
-      </svg>
+      <svg xmlns="http://www.w3.org/2000/svg" width="11" height="11" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2.5"><circle cx="12" cy="12" r="10"/><line x1="12" y1="8" x2="12" y2="12"/><line x1="12" y1="16" x2="12.01" y2="16"/></svg>
       <span id="chat-error-text"></span>
     </div>
 
-    <div class="input-bar flex-shrink-0 bg-paper/95 backdrop-blur-sm border-t border-ink/10 px-3 sm:px-5 pt-3">
-      <form id="message-form" onsubmit="sendMessage(event)" class="flex items-center gap-2">
-        <input id="message-input" type="text" placeholder="Write a message…" autocomplete="off"
-          class="flex-1 min-w-0 bg-cream border border-transparent focus:border-ink/20 rounded-2xl px-4 py-2.5 text-sm text-ink placeholder-mist/50 outline-none transition-colors" />
-        <button type="submit" id="send-btn"
-          class="flex-shrink-0 w-10 h-10 flex items-center justify-center bg-ink text-paper rounded-2xl hover:bg-rust active:scale-90 transition-all duration-150">
-          <svg xmlns="http://www.w3.org/2000/svg" width="14" height="14" viewBox="0 0 24 24" fill="none"
-            stroke="currentColor" stroke-width="2.5" stroke-linecap="round" stroke-linejoin="round">
-            <line x1="22" y1="2" x2="11" y2="13"/><polygon points="22,2 15,22 11,13 2,9"/>
-          </svg>
-        </button>
-      </form>
+    <!-- Input bar -->
+    <div id="input-area" class="hidden">
+      <div class="input-bar flex-shrink-0 bg-paper/95 backdrop-blur-sm border-t border-ink/10 px-3 sm:px-4 pt-3">
+
+        <!-- Voice recording bar -->
+        <div id="voice-bar" class="voice-bar mb-2 bg-cream rounded-2xl px-4 py-2.5 border border-rust/30">
+          <div class="rec-pulse w-2 h-2 rounded-full bg-rust flex-shrink-0"></div>
+          <span class="text-xs text-rust flex-1">Recording…</span>
+          <span id="rec-timer" class="text-xs text-rust font-mono">0:00</span>
+          <button onclick="cancelRecording()" class="text-xs text-mist hover:text-rust transition-colors ml-2">Cancel</button>
+        </div>
+
+        <!-- Text input row -->
+        <form id="message-form" onsubmit="sendTextMessage(event)" class="flex items-center gap-2">
+          <button type="button" id="voice-btn" onclick="toggleVoice()"
+            class="flex-shrink-0 w-10 h-10 flex items-center justify-center rounded-2xl bg-cream text-mist hover:text-rust hover:bg-rust/10 transition-all active:scale-90">
+            <!-- Mic icon -->
+            <svg id="mic-icon" xmlns="http://www.w3.org/2000/svg" width="15" height="15" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2" stroke-linecap="round" stroke-linejoin="round">
+              <path d="M12 1a3 3 0 0 0-3 3v8a3 3 0 0 0 6 0V4a3 3 0 0 0-3-3z"/>
+              <path d="M19 10v2a7 7 0 0 1-14 0v-2"/>
+              <line x1="12" y1="19" x2="12" y2="23"/>
+              <line x1="8" y1="23" x2="16" y2="23"/>
+            </svg>
+            <!-- Stop icon (hidden) -->
+            <svg id="stop-icon" class="hidden" xmlns="http://www.w3.org/2000/svg" width="15" height="15" viewBox="0 0 24 24" fill="currentColor"><rect x="4" y="4" width="16" height="16" rx="2"/></svg>
+          </button>
+
+          <input id="message-input" type="text" placeholder="Write a message…" autocomplete="off"
+            class="flex-1 min-w-0 bg-cream border border-transparent focus:border-ink/20 rounded-2xl px-4 py-2.5 text-sm text-ink placeholder-mist/50 outline-none transition-colors" />
+
+          <button type="submit" id="send-btn"
+            class="flex-shrink-0 w-10 h-10 flex items-center justify-center bg-ink text-paper rounded-2xl hover:bg-rust active:scale-90 transition-all">
+            <svg xmlns="http://www.w3.org/2000/svg" width="13" height="13" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2.5" stroke-linecap="round" stroke-linejoin="round">
+              <line x1="22" y1="2" x2="11" y2="13"/><polygon points="22,2 15,22 11,13 2,9"/>
+            </svg>
+          </button>
+        </form>
+
+      </div>
     </div>
   </div>
+</div>
 
-  <script>
-    // ─────────────────────────────────────────────────────────
-    // ⚠️  IMPORTANT: Replace this URL with your EXACT Netlify URL
-    //     Go to Supabase → Authentication → URL Configuration
-    //     and add your Netlify URL to "Redirect URLs" whitelist
-    // ─────────────────────────────────────────────────────────
-    const SITE_URL          = window.location.origin; // Auto-detects your deployed URL
-    const SUPABASE_URL      = 'https://xvvzxjaddcfvedtjudjx.supabase.co';
-    const SUPABASE_ANON_KEY = 'eyJhbGciOiJIUzI1NiIsInR5cCI6IkpXVCJ9.eyJpc3MiOiJzdXBhYmFzZSIsInJlZiI6Inh2dnp4amFkZGNmdmVkdGp1ZGp4Iiwicm9sZSI6ImFub24iLCJpYXQiOjE3NzIwOTM1ODAsImV4cCI6MjA4NzY2OTU4MH0.OdZpsbqU-WjB9beIX58-t9hH5vone-JJmFYIvLlN9hw';
+<!-- ── NEW CHAT MODAL ── -->
+<div id="new-chat-modal" class="hidden fixed inset-0 z-[150] flex items-center justify-center p-4">
+  <div class="absolute inset-0 bg-black/30 backdrop-blur-sm" onclick="closeNewChat()"></div>
+  <div class="relative bg-paper rounded-2xl w-full max-w-sm p-6 shadow-2xl animate-fade-in" style="box-shadow:0 0 0 1px #d4cfc4,0 20px 60px rgba(0,0,0,0.15)">
+    <div class="flex items-center justify-between mb-4">
+      <h2 class="font-display text-xl font-light text-ink">New conversation</h2>
+      <button onclick="closeNewChat()" class="w-7 h-7 flex items-center justify-center rounded-lg bg-cream text-mist hover:text-rust transition-colors">
+        <svg xmlns="http://www.w3.org/2000/svg" width="12" height="12" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2.5"><line x1="18" y1="6" x2="6" y2="18"/><line x1="6" y1="6" x2="18" y2="18"/></svg>
+      </button>
+    </div>
 
-    const { createClient } = supabase;
-    const sb = createClient(SUPABASE_URL, SUPABASE_ANON_KEY, {
-      auth: {
-        // FIX: Use PKCE flow for better security and reliable email confirmation
-        flowType: 'pkce',
-        autoRefreshToken: true,
-        persistSession: true,
-        detectSessionInUrl: true,  // FIX: Ensures tokens in URL are parsed on load
-      }
-    });
+    <div class="relative mb-3">
+      <input id="user-search" type="text" placeholder="Search by email…" oninput="searchUsers(this.value)"
+        class="w-full bg-cream border border-transparent focus:border-ink/25 rounded-xl px-4 py-2.5 text-sm text-ink placeholder-mist/50 outline-none transition-colors" style="font-size:16px" />
+      <div id="search-spinner" class="hidden absolute right-3 top-1/2 -translate-y-1/2 w-3.5 h-3.5 border-2 border-ink/20 border-t-ink/60 rounded-full spin"></div>
+    </div>
 
-    let currentUser     = null;
-    let currentTab      = 'login';
-    let realtimeChannel = null;
+    <div id="user-results" class="max-h-48 overflow-y-auto rounded-xl">
+      <p class="text-xs text-mist text-center py-4">Type to search for users</p>
+    </div>
 
-    const $authScreen = document.getElementById('auth-screen');
-    const $chatScreen = document.getElementById('chat-screen');
-    const $msgs       = document.getElementById('messages-container');
-    const $chatWin    = document.getElementById('chat-window');
-    const $loading    = document.getElementById('chat-loading');
-    const $empty      = document.getElementById('chat-empty');
-    const $connDot    = document.getElementById('conn-dot');
-    const $emailDisp  = document.getElementById('user-email-display');
+    <div id="modal-error" class="hidden mt-3 text-xs text-rust bg-rust/10 border border-rust/20 rounded-xl px-3 py-2"></div>
+  </div>
+</div>
 
-    // FIX: Handle email confirmation redirect properly
-    // Supabase SDK with detectSessionInUrl:true handles this automatically,
-    // but we still clean the URL and show feedback.
-    async function handleRedirectIfAny() {
-      const hash   = window.location.hash;
-      const search = window.location.search;
+<!-- ════════════════════════════════════ SCRIPT ════════════════════════════════════ -->
+<script>
+  // ── CONFIG ────────────────────────────────────────────────
+  const SUPABASE_URL      = 'https://xvvzxjaddcfvedtjudjx.supabase.co';
+  const SUPABASE_ANON_KEY = 'eyJhbGciOiJIUzI1NiIsInR5cCI6IkpXVCJ9.eyJpc3MiOiJzdXBhYmFzZSIsInJlZiI6Inh2dnp4amFkZGNmdmVkdGp1ZGp4Iiwicm9sZSI6ImFub24iLCJpYXQiOjE3NzIwOTM1ODAsImV4cCI6MjA4NzY2OTU4MH0.OdZpsbqU-WjB9beIX58-t9hH5vone-JJmFYIvLlN9hw';
+  const STORAGE_BUCKET    = 'voice-messages'; // create this bucket in Supabase Storage
 
-      if (hash.includes('access_token') || search.includes('code=') || search.includes('token=')) {
-        showAuthError('✓ Verifying your account, please wait…');
-        try {
-          if (search.includes('code=')) {
-            const { error } = await sb.auth.exchangeCodeForSession(window.location.href);
-            if (error) throw error;
-          }
-          // Clean the URL — remove tokens from the address bar
-          window.history.replaceState({}, document.title, window.location.pathname);
-        } catch (err) {
-          showAuthError('Verification failed: ' + (err.message || 'Please try logging in manually.'));
+  const { createClient } = supabase;
+  const sb = createClient(SUPABASE_URL, SUPABASE_ANON_KEY, {
+    auth: { flowType:'pkce', autoRefreshToken:true, persistSession:true, detectSessionInUrl:true }
+  });
+
+  // ── STATE ─────────────────────────────────────────────────
+  let currentUser   = null;
+  let currentTab    = 'login';
+  let activeConvId  = null;
+  let conversations = [];
+  let msgChannel    = null;
+  let convChannel   = null;
+
+  // Voice recording state
+  let mediaRecorder  = null;
+  let audioChunks    = [];
+  let isRecording    = false;
+  let recInterval    = null;
+  let recSeconds     = 0;
+
+  // ── ELEMENTS ──────────────────────────────────────────────
+  const $authScreen = document.getElementById('auth-screen');
+  const $app        = document.getElementById('app');
+  const $msgs       = document.getElementById('messages-container');
+  const $chatMsgs   = document.getElementById('chat-messages');
+  const $chatEmpty  = document.getElementById('chat-empty');
+  const $inputArea  = document.getElementById('input-area');
+  const $convList   = document.getElementById('conv-list');
+
+  // ── AUTH STATE ────────────────────────────────────────────
+  sb.auth.onAuthStateChange((_event, session) => {
+    if (session?.user) { currentUser = session.user; enterApp(); }
+    else               { currentUser = null;          enterAuth(); }
+  });
+
+  // Handle email confirmation redirect
+  (async () => {
+    const s = window.location.search;
+    if (s.includes('code=')) {
+      try { await sb.auth.exchangeCodeForSession(window.location.href); } catch(_) {}
+      window.history.replaceState({}, '', window.location.pathname);
+    }
+  })();
+
+  // ── AUTH ──────────────────────────────────────────────────
+  function showTab(tab) {
+    currentTab = tab;
+    const isLogin = tab === 'login';
+    document.getElementById('tab-login').className  = `flex-1 py-1.5 text-xs rounded-lg transition-all ${isLogin  ? 'bg-paper text-ink' : 'text-mist'}`;
+    document.getElementById('tab-signup').className = `flex-1 py-1.5 text-xs rounded-lg transition-all ${!isLogin ? 'bg-paper text-ink' : 'text-mist'}`;
+    document.getElementById('auth-btn-text').textContent = isLogin ? 'Login' : 'Create Account';
+    document.getElementById('switch-label').textContent  = isLogin ? 'No account?' : 'Have an account?';
+    document.getElementById('switch-btn').textContent    = isLogin ? 'Sign up' : 'Login';
+    document.getElementById('auth-error').classList.add('hidden');
+  }
+
+  async function handleAuth(e) {
+    e.preventDefault();
+    const email    = document.getElementById('auth-email').value.trim();
+    const password = document.getElementById('auth-password').value;
+    if (!email || !password) return;
+    setAuthLoading(true);
+    document.getElementById('auth-error').classList.add('hidden');
+    try {
+      if (currentTab === 'login') {
+        const { error } = await sb.auth.signInWithPassword({ email, password });
+        if (error) throw error;
+      } else {
+        const { data, error } = await sb.auth.signUp({ email, password, options:{ emailRedirectTo: window.location.origin } });
+        if (error) throw error;
+        if (data?.user && !data.session) {
+          showAuthErr('✓ Check your inbox to confirm your email, then login.');
+          setAuthLoading(false); return;
         }
       }
-    }
+    } catch (err) {
+      const m = err.message || '';
+      if (m.includes('Invalid login')) showAuthErr('Wrong email or password.');
+      else if (m.includes('not confirmed')) showAuthErr('Please confirm your email first.');
+      else if (m.includes('already registered')) showAuthErr('Account exists — try logging in.');
+      else showAuthErr(m || 'Authentication failed.');
+    } finally { setAuthLoading(false); }
+  }
 
-    // Run on page load
-    handleRedirectIfAny();
+  function setAuthLoading(on) {
+    document.getElementById('auth-btn-text').classList.toggle('hidden', on);
+    document.getElementById('auth-spinner').classList.toggle('hidden', !on);
+    document.getElementById('auth-submit').disabled = on;
+  }
+  function showAuthErr(m) {
+    const e = document.getElementById('auth-error');
+    e.textContent = m; e.classList.remove('hidden');
+  }
 
-    // ── Auth state listener ───────────────────────
-    sb.auth.onAuthStateChange((_event, session) => {
-      if (session?.user) { currentUser = session.user; enterChat(); }
-      else               { currentUser = null;          enterAuth(); }
-    });
+  async function handleSignOut() {
+    if (msgChannel)  { await sb.removeChannel(msgChannel);  msgChannel  = null; }
+    if (convChannel) { await sb.removeChannel(convChannel); convChannel = null; }
+    await sb.auth.signOut();
+  }
 
-    // ── Tab switch ────────────────────────────────
-    function showTab(tab) {
-      currentTab = tab;
-      const isLogin = tab === 'login';
-      const tl = document.getElementById('tab-login');
-      const ts = document.getElementById('tab-signup');
-      tl.className = `flex-1 py-1.5 text-xs rounded-lg transition-all duration-200 ${isLogin  ? 'bg-paper text-ink' : 'text-mist'}`;
-      ts.className = `flex-1 py-1.5 text-xs rounded-lg transition-all duration-200 ${!isLogin ? 'bg-paper text-ink' : 'text-mist'}`;
-      document.getElementById('auth-btn-text').textContent = isLogin ? 'Login' : 'Create Account';
-      document.getElementById('switch-label').textContent  = isLogin ? 'No account?' : 'Have an account?';
-      document.getElementById('switch-btn').textContent    = isLogin ? 'Sign up' : 'Login';
-      hideAuthError();
-    }
+  // ── ENTER APP ─────────────────────────────────────────────
+  function enterAuth() {
+    $app.style.display = 'none';
+    $authScreen.style.display = 'flex';
+    $msgs.innerHTML = '';
+    conversations = []; activeConvId = null;
+  }
 
-    // ── Auth submit ───────────────────────────────
-    async function handleAuth(e) {
-      e.preventDefault();
-      const email    = document.getElementById('auth-email').value.trim();
-      const password = document.getElementById('auth-password').value;
-      if (!email || !password) return;
-      setAuthLoading(true);
-      hideAuthError();
-      try {
-        let res;
-        if (currentTab === 'login') {
-          res = await sb.auth.signInWithPassword({ email, password });
-          if (res.error) throw res.error;
-        } else {
-          res = await sb.auth.signUp({
-            email,
-            password,
-            options: {
-              // FIX: Use window.location.origin so it works on any Netlify URL automatically
-              emailRedirectTo: SITE_URL,
-            }
-          });
-          if (res.error) throw res.error;
-          // If email confirmation is required (no session returned)
-          if (res.data?.user && !res.data.session) {
-            showAuthError('✓ Account created! Check your inbox and click the confirmation link.');
-            setAuthLoading(false);
-            return;
-          }
-          // If email confirmation is disabled in Supabase, user is logged in immediately
-        }
-      } catch (err) {
-        // FIX: Friendlier error messages
-        const msg = err.message || '';
-        if (msg.includes('Invalid login credentials')) {
-          showAuthError('Wrong email or password. Please try again.');
-        } else if (msg.includes('Email not confirmed')) {
-          showAuthError('Please confirm your email first. Check your inbox.');
-        } else if (msg.includes('User already registered')) {
-          showAuthError('An account with this email already exists. Try logging in.');
-        } else {
-          showAuthError(msg || 'Authentication failed. Please try again.');
-        }
-      } finally {
-        setAuthLoading(false);
+  async function enterApp() {
+    $authScreen.style.display = 'none';
+    $app.style.display = 'flex';
+    // Set my avatar/email
+    const initial = (currentUser.email || '?')[0].toUpperCase();
+    document.getElementById('my-avatar').textContent = initial;
+    document.getElementById('my-email').textContent  = currentUser.email;
+    await loadConversations();
+    subscribeConversations();
+    // Register user in profiles table
+    await sb.from('profiles').upsert({ id: currentUser.id, email: currentUser.email }, { onConflict:'id' });
+  }
+
+  // ── CONVERSATIONS ─────────────────────────────────────────
+  async function loadConversations() {
+    document.getElementById('conv-loading').classList.remove('hidden');
+    document.getElementById('conv-empty').classList.add('hidden');
+    // Remove existing conv items
+    document.querySelectorAll('.conv-item').forEach(el => el.remove());
+
+    try {
+      const { data, error } = await sb
+        .from('conversations')
+        .select('*')
+        .or(`user1_id.eq.${currentUser.id},user2_id.eq.${currentUser.id}`)
+        .order('last_message_at', { ascending: false, nullsFirst: false });
+      if (error) throw error;
+
+      document.getElementById('conv-loading').classList.add('hidden');
+      conversations = data || [];
+
+      if (!conversations.length) {
+        document.getElementById('conv-empty').classList.remove('hidden');
+        return;
       }
+      conversations.forEach(renderConvItem);
+    } catch(err) {
+      document.getElementById('conv-loading').classList.add('hidden');
+      console.error('loadConversations', err);
+    }
+  }
+
+  function renderConvItem(conv, prepend = false) {
+    // Determine the other user
+    const otherId    = conv.user1_id === currentUser.id ? conv.user2_id : conv.user1_id;
+    const otherEmail = conv.user1_id === currentUser.id ? conv.user2_email : conv.user1_email;
+    const initial    = (otherEmail || '?')[0].toUpperCase();
+
+    // Remove existing item if re-rendering
+    const existing = document.getElementById(`conv-${conv.id}`);
+    if (existing) existing.remove();
+
+    const div = document.createElement('div');
+    div.id = `conv-${conv.id}`;
+    div.className = `conv-item px-4 py-3 flex items-center gap-3 ${activeConvId === conv.id ? 'active' : ''}`;
+    div.onclick = () => openConversation(conv.id, otherEmail);
+
+    const ts = conv.last_message_at
+      ? new Date(conv.last_message_at).toLocaleTimeString([], { hour:'2-digit', minute:'2-digit' })
+      : '';
+
+    div.innerHTML = `
+      <div class="w-9 h-9 rounded-full bg-sage flex items-center justify-center text-paper text-sm font-medium flex-shrink-0">${initial}</div>
+      <div class="flex-1 min-w-0">
+        <div class="flex items-center justify-between gap-1">
+          <p class="text-sm text-ink truncate font-medium">${escHtml(otherEmail || 'Unknown')}</p>
+          <span style="font-size:.6rem" class="text-mist flex-shrink-0">${ts}</span>
+        </div>
+        <p class="text-xs text-mist truncate">${escHtml(conv.last_message_preview || '—')}</p>
+      </div>
+    `;
+
+    if (prepend) {
+      $convList.prepend(div);
+    } else {
+      $convList.appendChild(div);
+    }
+  }
+
+  function subscribeConversations() {
+    if (convChannel) { sb.removeChannel(convChannel); }
+    convChannel = sb.channel('conv:' + currentUser.id)
+      .on('postgres_changes', { event:'*', schema:'public', table:'conversations',
+          filter:`user1_id=eq.${currentUser.id}` }, () => loadConversations())
+      .on('postgres_changes', { event:'*', schema:'public', table:'conversations',
+          filter:`user2_id=eq.${currentUser.id}` }, () => loadConversations())
+      .subscribe();
+  }
+
+  // ── OPEN CONVERSATION ─────────────────────────────────────
+  async function openConversation(convId, otherEmail) {
+    activeConvId = convId;
+    closeSidebar();
+    document.getElementById('chat-empty').style.display = 'none';
+    $inputArea.classList.remove('hidden');
+
+    // Update header
+    const initial = (otherEmail || '?')[0].toUpperCase();
+    const av = document.getElementById('chat-header-avatar');
+    av.textContent = initial; av.classList.remove('hidden');
+    document.getElementById('chat-header-name').textContent = otherEmail || 'Unknown';
+    document.getElementById('chat-header-status').textContent = 'online';
+    document.getElementById('conn-dot').style.background = '#5a7a5e';
+
+    // Highlight active conv
+    document.querySelectorAll('.conv-item').forEach(el => el.classList.remove('active'));
+    const item = document.getElementById(`conv-${convId}`);
+    if (item) item.classList.add('active');
+
+    // Load messages
+    $msgs.innerHTML = '';
+    const loader = document.createElement('div');
+    loader.id = 'msg-loader';
+    loader.className = 'flex items-center justify-center py-12';
+    loader.innerHTML = '<div class="w-4 h-4 border-2 border-ink/15 border-t-ink/50 rounded-full spin"></div>';
+    $msgs.appendChild(loader);
+
+    if (msgChannel) { await sb.removeChannel(msgChannel); msgChannel = null; }
+
+    try {
+      const { data, error } = await sb
+        .from('messages')
+        .select('*')
+        .eq('conversation_id', convId)
+        .order('created_at', { ascending: true })
+        .limit(200);
+      if (error) throw error;
+
+      loader.remove();
+      if (!data?.length) {
+        const p = document.createElement('p');
+        p.className = 'text-center text-xs text-mist py-8';
+        p.textContent = 'No messages yet. Say hello!';
+        $msgs.appendChild(p);
+      } else {
+        data.forEach(renderMsg);
+        scrollBottom(false);
+      }
+    } catch(err) {
+      loader.remove();
+      showChatErr('Could not load messages: ' + err.message);
     }
 
-    // ── Sign out ──────────────────────────────────
-    async function handleSignOut() {
-      if (realtimeChannel) { await sb.removeChannel(realtimeChannel); realtimeChannel = null; }
-      await sb.auth.signOut();
+    subscribeMessages(convId);
+  }
+
+  function subscribeMessages(convId) {
+    msgChannel = sb.channel('msgs:' + convId)
+      .on('postgres_changes', { event:'INSERT', schema:'public', table:'messages',
+          filter:`conversation_id=eq.${convId}` }, (payload) => {
+        // Remove "no messages" placeholder
+        const placeholder = $msgs.querySelector('p.text-center.text-xs.text-mist');
+        if (placeholder) placeholder.remove();
+        renderMsg(payload.new);
+        scrollBottom(true);
+      })
+      .subscribe((status) => {
+        const dot = document.getElementById('conn-dot');
+        dot.style.background = status === 'SUBSCRIBED' ? '#5a7a5e' : '#c84b31';
+      });
+  }
+
+  // ── RENDER MESSAGE ────────────────────────────────────────
+  function renderMsg(msg) {
+    const isOwn   = msg.sender_id === currentUser.id;
+    const initial = (msg.sender_email || '?')[0].toUpperCase();
+
+    const wrapper = document.createElement('div');
+    wrapper.className = `msg-bubble flex gap-2 mb-3 ${isOwn ? 'flex-row-reverse' : 'flex-row'}`;
+
+    // Avatar
+    const av = document.createElement('div');
+    av.style.cssText = `width:1.75rem;height:1.75rem;border-radius:50%;flex-shrink:0;display:flex;align-items:center;justify-content:center;font-size:.68rem;font-weight:500;color:#f5f0e8;margin-top:2px;background:${isOwn?'#c84b31':'#5a7a5e'}`;
+    av.textContent = initial;
+
+    const col = document.createElement('div');
+    col.className = `flex flex-col gap-0.5 min-w-0 ${isOwn ? 'items-end' : 'items-start'}`;
+    col.style.maxWidth = 'min(80%, 360px)';
+
+    // Bubble
+    const bubble = document.createElement('div');
+    bubble.className = `px-3.5 py-2 text-sm leading-relaxed break-words w-full rounded-2xl ${isOwn ? 'bg-ink text-paper rounded-tr-sm' : 'bg-cream text-ink rounded-tl-sm'}`;
+
+    if (msg.message_type === 'voice' && msg.voice_url) {
+      // Voice message bubble
+      const voiceWrapper = document.createElement('div');
+      voiceWrapper.className = 'flex items-center gap-2';
+
+      // Waveform visual
+      const wave = document.createElement('div');
+      wave.className = 'flex items-center gap-0.5 h-6';
+      for (let i = 0; i < 5; i++) {
+        const bar = document.createElement('div');
+        bar.className = 'wave-bar';
+        bar.style.height = `${10 + Math.random()*14}px`;
+        bar.style.animationDuration = `${0.6 + Math.random()*0.5}s`;
+        wave.appendChild(bar);
+      }
+
+      const audio = document.createElement('audio');
+      audio.src = msg.voice_url;
+      audio.controls = true;
+      audio.style.cssText = 'height:28px;max-width:160px;min-width:120px;';
+
+      const dur = document.createElement('span');
+      dur.style.cssText = 'font-size:.6rem;opacity:0.6;white-space:nowrap';
+      dur.textContent = msg.voice_duration ? formatDuration(msg.voice_duration) : '';
+
+      voiceWrapper.appendChild(wave);
+      voiceWrapper.appendChild(audio);
+      if (msg.voice_duration) voiceWrapper.appendChild(dur);
+
+      bubble.innerHTML = '';
+      bubble.appendChild(voiceWrapper);
+      // Voice bubble style tweak
+      bubble.style.padding = '8px 12px';
+    } else {
+      bubble.textContent = msg.content || '';
     }
 
-    // ── Screen transitions ────────────────────────
-    function enterAuth() {
-      $chatScreen.classList.remove('visible');
-      $authScreen.style.display = '';
-      $msgs.innerHTML = '';
+    // Timestamp
+    const ts = document.createElement('p');
+    ts.style.cssText = 'font-size:.6rem;letter-spacing:.05em;color:#8a9ba880;padding:0 4px';
+    ts.textContent = new Date(msg.created_at).toLocaleTimeString([], { hour:'2-digit', minute:'2-digit' });
+
+    col.appendChild(bubble);
+    col.appendChild(ts);
+    wrapper.appendChild(av);
+    wrapper.appendChild(col);
+    $msgs.appendChild(wrapper);
+  }
+
+  // ── SEND TEXT MESSAGE ─────────────────────────────────────
+  async function sendTextMessage(e) {
+    e.preventDefault();
+    const input   = document.getElementById('message-input');
+    const content = input.value.trim();
+    if (!content || !activeConvId) return;
+    input.value = '';
+    input.disabled = true;
+    try {
+      const { error } = await sb.from('messages').insert([{
+        conversation_id: activeConvId,
+        sender_id:       currentUser.id,
+        sender_email:    currentUser.email,
+        content,
+        message_type:   'text'
+      }]);
+      if (error) throw error;
+      // Update conversation preview
+      await sb.from('conversations').update({
+        last_message_preview: content,
+        last_message_at:      new Date().toISOString()
+      }).eq('id', activeConvId);
+    } catch(err) {
+      input.value = content;
+      showChatErr('Send failed: ' + err.message);
+    } finally {
+      input.disabled = false;
+      input.focus();
+    }
+  }
+
+  // ── VOICE RECORDING ───────────────────────────────────────
+  async function toggleVoice() {
+    if (isRecording) {
+      stopRecording();
+    } else {
+      await startRecording();
+    }
+  }
+
+  async function startRecording() {
+    if (!activeConvId) return;
+    try {
+      const stream = await navigator.mediaDevices.getUserMedia({ audio: true });
+      audioChunks = [];
+      // Choose best supported format
+      const mimeType = MediaRecorder.isTypeSupported('audio/webm;codecs=opus')
+        ? 'audio/webm;codecs=opus'
+        : MediaRecorder.isTypeSupported('audio/webm') ? 'audio/webm'
+        : MediaRecorder.isTypeSupported('audio/mp4') ? 'audio/mp4' : '';
+
+      mediaRecorder = new MediaRecorder(stream, mimeType ? { mimeType } : {});
+      mediaRecorder.ondataavailable = e => { if (e.data.size > 0) audioChunks.push(e.data); };
+      mediaRecorder.onstop = async () => {
+        stream.getTracks().forEach(t => t.stop());
+        if (audioChunks.length) await uploadVoiceMessage(audioChunks, mediaRecorder.mimeType);
+      };
+      mediaRecorder.start(100);
+      isRecording = true;
+      recSeconds  = 0;
+
+      // UI
+      document.getElementById('voice-bar').classList.add('active');
+      document.getElementById('mic-icon').classList.add('hidden');
+      document.getElementById('stop-icon').classList.remove('hidden');
+      document.getElementById('voice-btn').style.color = '#c84b31';
+      document.getElementById('message-input').disabled = true;
+
+      recInterval = setInterval(() => {
+        recSeconds++;
+        document.getElementById('rec-timer').textContent = formatDuration(recSeconds);
+        if (recSeconds >= 120) stopRecording(); // Max 2 min
+      }, 1000);
+
+    } catch(err) {
+      showChatErr('Microphone access denied. Please allow mic permissions.');
+    }
+  }
+
+  function stopRecording() {
+    if (mediaRecorder && mediaRecorder.state !== 'inactive') {
+      mediaRecorder.stop();
+    }
+    isRecording = false;
+    clearInterval(recInterval);
+    resetVoiceUI();
+  }
+
+  function cancelRecording() {
+    audioChunks = []; // discard
+    if (mediaRecorder && mediaRecorder.state !== 'inactive') {
+      mediaRecorder.ondataavailable = null;
+      mediaRecorder.onstop = () => { if(mediaRecorder.stream) mediaRecorder.stream.getTracks().forEach(t=>t.stop()); };
+      mediaRecorder.stop();
+    }
+    isRecording = false;
+    clearInterval(recInterval);
+    resetVoiceUI();
+  }
+
+  function resetVoiceUI() {
+    document.getElementById('voice-bar').classList.remove('active');
+    document.getElementById('mic-icon').classList.remove('hidden');
+    document.getElementById('stop-icon').classList.add('hidden');
+    document.getElementById('voice-btn').style.color = '';
+    document.getElementById('message-input').disabled = false;
+    document.getElementById('rec-timer').textContent = '0:00';
+  }
+
+  async function uploadVoiceMessage(chunks, mimeType) {
+    if (!activeConvId) return;
+
+    const ext  = mimeType.includes('mp4') ? 'mp4' : 'webm';
+    const blob = new Blob(chunks, { type: mimeType });
+    const path = `${currentUser.id}/${Date.now()}.${ext}`;
+
+    try {
+      // Upload to Supabase Storage
+      const { error: upErr } = await sb.storage
+        .from(STORAGE_BUCKET)
+        .upload(path, blob, { contentType: mimeType, upsert: false });
+
+      if (upErr) throw upErr;
+
+      // Get public URL
+      const { data: urlData } = sb.storage.from(STORAGE_BUCKET).getPublicUrl(path);
+      const voiceUrl = urlData.publicUrl;
+
+      const duration = recSeconds;
+
+      // Insert message record
+      const { error: msgErr } = await sb.from('messages').insert([{
+        conversation_id: activeConvId,
+        sender_id:       currentUser.id,
+        sender_email:    currentUser.email,
+        content:         null,
+        message_type:    'voice',
+        voice_url:       voiceUrl,
+        voice_duration:  duration
+      }]);
+      if (msgErr) throw msgErr;
+
+      // Update conversation preview
+      await sb.from('conversations').update({
+        last_message_preview: '🎙 Voice message',
+        last_message_at:      new Date().toISOString()
+      }).eq('id', activeConvId);
+
+    } catch(err) {
+      showChatErr('Voice send failed: ' + err.message);
+    }
+  }
+
+  // ── NEW CONVERSATION ──────────────────────────────────────
+  function openNewChat() { document.getElementById('new-chat-modal').classList.remove('hidden'); }
+  function closeNewChat() {
+    document.getElementById('new-chat-modal').classList.add('hidden');
+    document.getElementById('user-search').value = '';
+    document.getElementById('user-results').innerHTML = '<p class="text-xs text-mist text-center py-4">Type to search for users</p>';
+    document.getElementById('modal-error').classList.add('hidden');
+  }
+
+  let searchTimeout;
+  async function searchUsers(query) {
+    clearTimeout(searchTimeout);
+    const res = document.getElementById('user-results');
+    const spinner = document.getElementById('search-spinner');
+
+    if (!query.trim()) {
+      res.innerHTML = '<p class="text-xs text-mist text-center py-4">Type to search for users</p>';
+      return;
     }
 
-    function enterChat() {
-      $authScreen.style.display = 'none';
-      $chatScreen.classList.add('visible');
-      $emailDisp.textContent = currentUser.email;
-      initChat();
-    }
-
-    // ── Init chat ─────────────────────────────────
-    async function initChat() {
-      // Avoid duplicate subscriptions if initChat is called again
-      if (realtimeChannel) { await sb.removeChannel(realtimeChannel); realtimeChannel = null; }
-      $loading.classList.remove('hidden');
-      $empty.classList.remove('show');
-      $msgs.innerHTML = '';
-      await loadMessages();
-      subscribeRealtime();
-    }
-
-    // ── Load messages ─────────────────────────────
-    async function loadMessages() {
+    searchTimeout = setTimeout(async () => {
+      spinner.classList.remove('hidden');
       try {
         const { data, error } = await sb
-          .from('messages')
-          .select('*')
-          .order('created_at', { ascending: true })
-          .limit(300);
+          .from('profiles')
+          .select('id, email')
+          .ilike('email', `%${query}%`)
+          .neq('id', currentUser.id)
+          .limit(10);
         if (error) throw error;
-        $loading.classList.add('hidden');
+
+        spinner.classList.add('hidden');
+        res.innerHTML = '';
+
         if (!data?.length) {
-          $empty.classList.add('show'); // FIX: use .show class instead of removing 'hidden'
-        } else {
-          data.forEach(renderMessage);
-          scrollToBottom(false);
+          res.innerHTML = '<p class="text-xs text-mist text-center py-4">No users found</p>';
+          return;
         }
-      } catch (err) {
-        $loading.classList.add('hidden');
-        showChatError('Could not load messages: ' + (err.message || 'unknown error'));
-      }
-    }
 
-    // ── Realtime subscription ─────────────────────
-    function subscribeRealtime() {
-      realtimeChannel = sb
-        .channel('public:messages')
-        .on('postgres_changes', { event: 'INSERT', schema: 'public', table: 'messages' }, (payload) => {
-          $empty.classList.remove('show'); // FIX: consistent with new approach
-          renderMessage(payload.new);
-          scrollToBottom(true);
-        })
-        .subscribe((status) => {
-          if (status === 'SUBSCRIBED') {
-            $connDot.style.background = '#5a7a5e'; // green
-            $connDot.title = 'Connected';
-          } else if (status === 'CHANNEL_ERROR' || status === 'TIMED_OUT') {
-            $connDot.style.background = '#c84b31'; // red
-            $connDot.title = 'Disconnected';
-            showChatError('Connection lost — refresh the page to reconnect.');
-          }
+        data.forEach(user => {
+          const item = document.createElement('div');
+          item.className = 'user-result flex items-center gap-3 px-3 py-2.5 rounded-xl';
+          const initial = user.email[0].toUpperCase();
+          item.innerHTML = `
+            <div class="w-8 h-8 rounded-full bg-sage flex items-center justify-center text-paper text-xs font-medium flex-shrink-0">${initial}</div>
+            <p class="text-sm text-ink truncate flex-1">${escHtml(user.email)}</p>
+            <span style="font-size:.6rem;letter-spacing:.07em;text-transform:uppercase" class="text-mist">chat</span>
+          `;
+          item.onclick = () => startConversation(user.id, user.email);
+          res.appendChild(item);
         });
-    }
+      } catch(err) {
+        spinner.classList.add('hidden');
+        res.innerHTML = '<p class="text-xs text-rust text-center py-4">Search failed</p>';
+      }
+    }, 350);
+  }
 
-    // ── Send message ──────────────────────────────
-    async function sendMessage(e) {
-      e.preventDefault();
-      const input   = document.getElementById('message-input');
-      const content = input.value.trim();
-      if (!content || !currentUser) return;
-      input.value = '';
-      hideChatError();
+  async function startConversation(otherId, otherEmail) {
+    document.getElementById('modal-error').classList.add('hidden');
+    try {
+      // Check if conversation already exists
+      const { data: existing } = await sb
+        .from('conversations')
+        .select('id')
+        .or(
+          `and(user1_id.eq.${currentUser.id},user2_id.eq.${otherId}),and(user1_id.eq.${otherId},user2_id.eq.${currentUser.id})`
+        )
+        .maybeSingle();
 
-      // FIX: Disable input while sending to prevent double-sends
-      input.disabled = true;
-      try {
-        const { error } = await sb.from('messages').insert([{
-          content,
-          user_email: currentUser.email
-        }]);
+      let convId;
+      if (existing) {
+        convId = existing.id;
+      } else {
+        const { data: newConv, error } = await sb
+          .from('conversations')
+          .insert([{
+            user1_id:    currentUser.id,
+            user1_email: currentUser.email,
+            user2_id:    otherId,
+            user2_email: otherEmail
+          }])
+          .select()
+          .single();
         if (error) throw error;
-      } catch (err) {
-        input.value = content; // Restore message on failure
-        showChatError('Send failed: ' + (err.message || 'unknown error'));
-      } finally {
-        input.disabled = false;
-        input.focus();
-      }
-    }
-
-    // ── Render message bubble ─────────────────────
-    function renderMessage(msg) {
-      const isOwn   = msg.user_email === currentUser?.email;
-      const initial = (msg.user_email || '?')[0].toUpperCase();
-
-      const wrapper = document.createElement('div');
-      wrapper.className = `msg-bubble flex gap-2 mb-2.5 ${isOwn ? 'flex-row-reverse' : 'flex-row'}`;
-
-      const av = document.createElement('div');
-      av.style.cssText = `width:1.75rem;height:1.75rem;border-radius:50%;flex-shrink:0;display:flex;align-items:center;justify-content:center;font-size:.7rem;font-weight:500;color:#f5f0e8;margin-top:2px;background:${isOwn ? '#c84b31' : '#5a7a5e'}`;
-      av.textContent = initial;
-
-      const col = document.createElement('div');
-      col.className = `flex flex-col gap-0.5 min-w-0 ${isOwn ? 'items-end' : 'items-start'}`;
-      col.style.maxWidth = 'min(78%, 340px)';
-
-      if (!isOwn) {
-        const lbl = document.createElement('p');
-        lbl.className = 'tag text-mist px-1 truncate w-full';
-        lbl.textContent = msg.user_email || 'anonymous';
-        col.appendChild(lbl);
+        convId = newConv.id;
       }
 
-      const bubble = document.createElement('div');
-      bubble.className = `px-3.5 py-2 text-sm leading-relaxed break-words w-full rounded-2xl ${isOwn ? 'bg-ink text-paper rounded-tr-sm' : 'bg-cream text-ink rounded-tl-sm'}`;
-      bubble.textContent = msg.content; // XSS-safe: textContent only
+      closeNewChat();
+      await loadConversations();
+      await openConversation(convId, otherEmail);
 
-      const ts = document.createElement('p');
-      ts.className = 'tag text-mist/50 px-1';
-      ts.textContent = new Date(msg.created_at).toLocaleTimeString([], { hour:'2-digit', minute:'2-digit' });
+    } catch(err) {
+      const el = document.getElementById('modal-error');
+      el.textContent = err.message || 'Could not start conversation.';
+      el.classList.remove('hidden');
+    }
+  }
 
-      col.appendChild(bubble);
-      col.appendChild(ts);
-      wrapper.appendChild(av);
-      wrapper.appendChild(col);
-      $msgs.appendChild(wrapper);
-    }
+  // ── MOBILE SIDEBAR ────────────────────────────────────────
+  function openSidebar()  {
+    document.getElementById('sidebar').classList.add('open');
+    document.getElementById('sidebar-overlay').style.display = 'block';
+  }
+  function closeSidebar() {
+    document.getElementById('sidebar').classList.remove('open');
+    document.getElementById('sidebar-overlay').style.display = 'none';
+  }
 
-    // ── Helpers ───────────────────────────────────
-    function scrollToBottom(smooth) {
-      $chatWin.scrollTo({ top: $chatWin.scrollHeight, behavior: smooth ? 'smooth' : 'instant' });
-    }
-    function setAuthLoading(on) {
-      document.getElementById('auth-btn-text').classList.toggle('hidden', on);
-      document.getElementById('auth-spinner').classList.toggle('hidden', !on);
-      document.getElementById('auth-submit').disabled = on;
-    }
-    function showAuthError(m) {
-      const e = document.getElementById('auth-error');
-      e.textContent = m;
-      e.classList.remove('hidden');
-    }
-    function hideAuthError() { document.getElementById('auth-error').classList.add('hidden'); }
-    function showChatError(m) {
-      document.getElementById('chat-error-text').textContent = m;
-      document.getElementById('chat-error').classList.remove('hidden');
-      setTimeout(hideChatError, 6000);
-    }
-    function hideChatError() { document.getElementById('chat-error').classList.add('hidden'); }
+  // ── HELPERS ───────────────────────────────────────────────
+  function scrollBottom(smooth) {
+    $chatMsgs.scrollTo({ top: $chatMsgs.scrollHeight, behavior: smooth ? 'smooth' : 'instant' });
+  }
+  function showChatErr(m) {
+    document.getElementById('chat-error-text').textContent = m;
+    document.getElementById('chat-error').classList.remove('hidden');
+    setTimeout(() => document.getElementById('chat-error').classList.add('hidden'), 6000);
+  }
+  function escHtml(s) {
+    return String(s).replace(/&/g,'&amp;').replace(/</g,'&lt;').replace(/>/g,'&gt;').replace(/"/g,'&quot;');
+  }
+  function formatDuration(secs) {
+    const m = Math.floor(secs / 60), s = secs % 60;
+    return `${m}:${String(s).padStart(2,'0')}`;
+  }
 
-    document.getElementById('message-input').addEventListener('keydown', e => {
-      if (e.key === 'Enter' && !e.shiftKey) { e.preventDefault(); document.getElementById('message-form').requestSubmit(); }
-    });
-  </script>
+  // Enter key in message input
+  document.getElementById('message-input').addEventListener('keydown', e => {
+    if (e.key === 'Enter' && !e.shiftKey) { e.preventDefault(); document.getElementById('message-form').requestSubmit(); }
+  });
+</script>
 </body>
 </html>
